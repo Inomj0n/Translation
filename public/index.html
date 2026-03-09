@@ -1,0 +1,649 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Translit Gold</title>
+  <style>
+    :root {
+      --bg: #f7f1e3;
+      --bg-soft: #efe3c2;
+      --panel: #fffaf0;
+      --text: #2f2412;
+      --muted: #7f6b45;
+      --line: #d9bf84;
+      --gold: #c79a3b;
+      --gold-deep: #a97c26;
+      --gold-soft: #f2dfb1;
+      --ok: #2f7d62;
+      --err: #b64237;
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 10% 10%, rgba(199, 154, 59, 0.24), transparent 35%),
+        radial-gradient(circle at 90% 85%, rgba(169, 124, 38, 0.18), transparent 34%),
+        linear-gradient(160deg, var(--bg), var(--bg-soft));
+      padding: 18px;
+      display: grid;
+      place-items: center;
+    }
+
+    .app {
+      width: min(980px, 100%);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: linear-gradient(180deg, #fffdf7, var(--panel));
+      box-shadow: 0 16px 40px rgba(114, 82, 25, 0.16);
+      overflow: hidden;
+    }
+
+    .top {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(120deg, rgba(199,154,59,0.18), rgba(255,255,255,0.2));
+    }
+
+    .brand {
+      font-weight: 700;
+      font-size: 1rem;
+    }
+
+    .content {
+      padding: 20px;
+      display: block;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 251, 242, 0.9);
+      padding: 14px;
+    }
+
+    .title {
+      margin: 2px 0 6px;
+      font-size: 1.35rem;
+    }
+
+    .subtitle {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .dropzone {
+      border: 2px dashed #cfaf6c;
+      border-radius: 16px;
+      background: #fffdfa;
+      padding: 16px;
+      cursor: pointer;
+      transition: background-color .16s ease, border-color .16s ease, transform .16s ease;
+    }
+
+    .dropzone.dragover {
+      border-color: var(--gold-deep);
+      background: #fff5df;
+      transform: translateY(-1px);
+    }
+
+    .ant-upload-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .ant-btn-like {
+      border: 1px solid #cfaf6c;
+      background: #fff;
+      color: #6b5124;
+      border-radius: 8px;
+      height: 38px;
+      padding: 0 14px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all .2s ease;
+    }
+
+    .ant-btn-like:hover {
+      color: #8d6620;
+      border-color: #b98937;
+      background: #fffaf1;
+    }
+
+    .upload-tip {
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .file-row {
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      font-size: 0.86rem;
+      color: #6a5630;
+      min-height: 1.2em;
+    }
+
+    .upload-list {
+      list-style: none;
+      margin: 8px 0 0;
+      padding: 0;
+      display: grid;
+      gap: 8px;
+    }
+
+    .upload-item {
+      border: 1px solid #d8bd83;
+      background: #fff8e8;
+      border-radius: 10px;
+      padding: 9px 11px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.86rem;
+      color: #654b1f;
+    }
+
+    .upload-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 70%;
+    }
+
+    .upload-size {
+      color: #927548;
+      font-size: 0.8rem;
+      margin-left: 6px;
+    }
+
+    .upload-actions {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .icon-btn {
+      border: 1px solid #d2b472;
+      background: #fff;
+      color: #7c5a23;
+      border-radius: 999px;
+      width: 26px;
+      height: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 0.82rem;
+      line-height: 1;
+    }
+
+    .icon-btn:hover {
+      background: #fff5df;
+    }
+
+    .clear-btn {
+      border: 1px solid #cfaf6c;
+      background: #f9ebcb;
+      color: #6b5124;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      display: none;
+    }
+
+    .actions {
+      margin-top: 12px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border: 1px solid transparent;
+      border-radius: 999px;
+      padding: 12px 22px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      transition: transform .15s ease, background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #convertBtn {
+      background: linear-gradient(180deg, #d8ad52, var(--gold));
+      color: #fffaf1;
+      border-color: #9b7122;
+      box-shadow: 0 8px 18px rgba(169, 124, 38, 0.32);
+    }
+
+    #convertBtn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 22px rgba(169, 124, 38, 0.4);
+    }
+
+    #convertBtn:disabled {
+      opacity: .65;
+      cursor: wait;
+      transform: none;
+    }
+
+    #downloadBtn {
+      display: none;
+      background: var(--gold-soft);
+      border-color: #caa256;
+      color: #664b1f;
+      box-shadow: 0 8px 18px rgba(169, 124, 38, 0.26);
+    }
+
+    #downloadBtn.show {
+      display: inline-flex;
+      animation: popIn .26s ease-out, pulseGlow 1.8s ease-in-out 2;
+    }
+
+    .progress-wrap {
+      margin-top: 10px;
+      display: none;
+      gap: 8px;
+    }
+
+    .progress-wrap.show {
+      display: grid;
+    }
+
+    .progress-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: #7a643d;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 9px;
+      border-radius: 999px;
+      background: #ecd8ab;
+      overflow: hidden;
+      border: 1px solid #d5bb80;
+    }
+
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #c79a3b, #e0bb6f);
+      transition: width 160ms linear;
+    }
+
+    .status {
+      min-height: 1.3em;
+      margin: 10px 0 0;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #6d5832;
+    }
+
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); }
+
+    @media (max-width: 640px) {
+      body { padding: 10px; }
+      .top,
+      .content { padding: 12px; }
+      .actions { flex-direction: column; }
+      .btn { width: 100%; }
+      .ant-upload-wrap {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+
+    @keyframes popIn {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 8px 18px rgba(169, 124, 38, 0.26); }
+      50% { box-shadow: 0 10px 26px rgba(169, 124, 38, 0.45); }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="top">
+      <div class="brand">Translit Gold</div>
+    </header>
+
+    <section class="content">
+      <section class="panel">
+        <h1 class="title">Транслитерация .ppt, .pptx, .docx, .pdf, .txt</h1>
+        <p class="subtitle">Перетащите файл в область ниже или выберите вручную.</p>
+
+        <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Зона загрузки файла">
+          <div class="ant-upload-wrap">
+            <button id="pickBtn" class="ant-btn-like" type="button">
+              <span aria-hidden="true">[+]</span>
+              <span>Выбрать файл</span>
+            </button>
+            <div class="upload-tip">или перетащите файл сюда</div>
+          </div>
+          <input
+            type="file"
+            id="fileInput"
+            hidden
+            accept=".pdf,.docx,.txt,.ppt,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain"
+          />
+        </div>
+
+        <div class="file-row">
+          <div id="fileMeta">Файл не выбран</div>
+          <button id="clearBtn" class="clear-btn" type="button">Очистить</button>
+        </div>
+        <ul id="uploadList" class="upload-list"></ul>
+
+        <div class="actions">
+          <button class="btn" id="convertBtn" type="button">Конвертировать</button>
+          <a class="btn" id="downloadBtn" href="#">Скачать результат</a>
+        </div>
+
+        <div id="progressWrap" class="progress-wrap">
+          <div class="progress-track">
+            <div id="progressFill" class="progress-fill"></div>
+          </div>
+        </div>
+
+        <p id="status" class="status"></p>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const dropzone = document.getElementById('dropzone');
+    const pickBtn = document.getElementById('pickBtn');
+    const fileMeta = document.getElementById('fileMeta');
+    const clearBtn = document.getElementById('clearBtn');
+    const uploadList = document.getElementById('uploadList');
+    const convertBtn = document.getElementById('convertBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const statusEl = document.getElementById('status');
+    const progressWrap = document.getElementById('progressWrap');
+    const progressFill = document.getElementById('progressFill');
+    let progressTimer = null;
+    let activeRequestId = 0;
+    let currentUpload = null;
+
+    function setStatus(message, type) {
+      statusEl.textContent = message;
+      statusEl.className = `status ${type || ''}`.trim();
+    }
+
+    function setProgress(value) {
+      const safeValue = Number.isFinite(value) ? value : 0;
+      const normalized = Math.max(0, Math.min(100, Math.round(safeValue)));
+      progressFill.style.width = `${normalized}%`;
+    }
+
+    function stopProgressTimer() {
+      if (progressTimer) {
+        clearInterval(progressTimer);
+        progressTimer = null;
+      }
+    }
+
+    function estimateWaitMs(fileSizeBytes) {
+      const minBaseMs = 2500;
+      const sizeMb = fileSizeBytes / (1024 * 1024);
+      const extraBySizeMs = Math.min(15000, Math.floor(sizeMb * 800));
+      return minBaseMs + extraBySizeMs;
+    }
+
+    function startServerProgress(requestId, startPercent, estimatedMs) {
+      const startedAt = Date.now();
+      stopProgressTimer();
+
+      progressTimer = setInterval(() => {
+        if (requestId !== activeRequestId) {
+          stopProgressTimer();
+          return;
+        }
+
+        const elapsed = Date.now() - startedAt;
+        const ratio = Math.min(1, elapsed / Math.max(estimatedMs, 1));
+        const eased = 1 - Math.pow(1 - ratio, 2);
+        const value = startPercent + eased * (95 - startPercent);
+        setProgress(value, 'Обработка на сервере...');
+      }, 120);
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return `${bytes} Б`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
+      return `${(bytes / (1024 * 1024)).toFixed(2)} МБ`;
+    }
+
+    function setSelectedFile(file) {
+      if (!file) {
+        fileMeta.textContent = 'Файл не выбран';
+        clearBtn.style.display = 'none';
+        uploadList.innerHTML = '';
+        return;
+      }
+
+      fileMeta.textContent = `${file.name} (${formatFileSize(file.size)})`;
+      clearBtn.style.display = 'inline-block';
+    }
+
+    function renderUploadItem() {
+      if (!currentUpload) {
+        uploadList.innerHTML = '';
+        return;
+      }
+
+      uploadList.innerHTML = `
+        <li class="upload-item">
+          <div class="upload-name" title="${currentUpload.name}">
+            ${currentUpload.name}
+            <span class="upload-size">(${formatFileSize(currentUpload.size)})</span>
+          </div>
+          <div class="upload-actions">
+            <button class="icon-btn" id="removeUploadBtn" type="button" title="Удалить">🗑</button>
+          </div>
+        </li>
+      `;
+
+      const removeBtn = document.getElementById('removeUploadBtn');
+      if (removeBtn) {
+        removeBtn.addEventListener('click', () => {
+          fileInput.value = '';
+          currentUpload = null;
+          setSelectedFile(null);
+          downloadBtn.classList.remove('show');
+          setStatus('', '');
+          progressWrap.classList.remove('show');
+          setProgress(0, 'Подготовка...');
+        });
+      }
+    }
+
+    function hasAllowedExtension(name) {
+      return /\.(pdf|docx|txt|ppt|pptx)$/i.test(name);
+    }
+
+    function assignFile(file) {
+      if (!file) return;
+      if (!hasAllowedExtension(file.name)) {
+        setStatus('Неподдерживаемый формат файла.', 'err');
+        return;
+      }
+
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      fileInput.files = dt.files;
+      currentUpload = { name: file.name, size: file.size, status: 'idle' };
+      setSelectedFile(file);
+      renderUploadItem();
+      setStatus('', '');
+    }
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    pickBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.click();
+    });
+    dropzone.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        fileInput.click();
+      }
+    });
+
+    fileInput.addEventListener('change', () => {
+      const selected = fileInput.files[0];
+      if (selected) {
+        currentUpload = { name: selected.name, size: selected.size, status: 'idle' };
+      } else {
+        currentUpload = null;
+      }
+      setSelectedFile(selected);
+      renderUploadItem();
+    });
+
+    clearBtn.addEventListener('click', () => {
+      fileInput.value = '';
+      setSelectedFile(null);
+      currentUpload = null;
+      renderUploadItem();
+      downloadBtn.classList.remove('show');
+      setStatus('', '');
+      progressWrap.classList.remove('show');
+      setProgress(0);
+    });
+
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      assignFile(file);
+    });
+
+    convertBtn.addEventListener('click', async () => {
+      const file = fileInput.files[0];
+
+      if (!file) {
+        setStatus('Сначала выберите файл.', 'err');
+        downloadBtn.classList.remove('show');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+      const requestId = Date.now();
+      activeRequestId = requestId;
+      const estimatedWait = estimateWaitMs(file.size || 0);
+
+      convertBtn.disabled = true;
+      clearBtn.disabled = true;
+      if (currentUpload) {
+        currentUpload.status = 'uploading';
+        renderUploadItem();
+      }
+      progressWrap.classList.add('show');
+      setProgress(0);
+      setStatus('', '');
+      downloadBtn.classList.remove('show');
+
+      try {
+        const response = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', '/convert');
+          xhr.responseType = 'json';
+
+          xhr.upload.onprogress = (event) => {
+            if (!event.lengthComputable) return;
+            const uploadPercent = (event.loaded / event.total) * 65;
+            setProgress(uploadPercent);
+          };
+
+          xhr.onloadstart = () => {
+            setProgress(5);
+            startServerProgress(requestId, 66, estimatedWait);
+          };
+
+          xhr.onload = () => resolve({
+            ok: xhr.status >= 200 && xhr.status < 300,
+            status: xhr.status,
+            json: async () => xhr.response
+          });
+
+          xhr.onerror = () => reject(new Error('Сетевая ошибка при загрузке файла.'));
+          xhr.send(formData);
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error((result && result.error) || 'Ошибка конвертации.');
+        }
+
+        stopProgressTimer();
+        setProgress(100);
+        await new Promise((resolve) => setTimeout(resolve, 220));
+        setStatus(result.message, 'ok');
+        if (currentUpload) {
+          currentUpload.status = 'done';
+          renderUploadItem();
+        }
+        downloadBtn.href = result.downloadUrl;
+        downloadBtn.setAttribute('download', result.outputName || 'result');
+        downloadBtn.classList.add('show');
+      } catch (error) {
+        stopProgressTimer();
+        setProgress(0);
+        setStatus(error.message, 'err');
+        if (currentUpload) {
+          currentUpload.status = 'error';
+          renderUploadItem();
+        }
+        downloadBtn.classList.remove('show');
+      } finally {
+        stopProgressTimer();
+        convertBtn.disabled = false;
+        clearBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
