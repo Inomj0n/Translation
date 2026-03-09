@@ -14,9 +14,13 @@ const execFileAsync = promisify(execFile);
 
 const app = express();
 const PORT = 3000;
+const isVercel = Boolean(process.env.VERCEL);
+const writableRoot = isVercel ? '/tmp' : __dirname;
 
-const uploadsDir = path.join(__dirname, 'uploads');
-const outputDir = path.join(__dirname, 'output');
+const uploadsDir = path.join(writableRoot, 'uploads');
+const outputDir = path.join(writableRoot, 'output');
+const logsDir = path.join(writableRoot, 'logs');
+const errorLogPath = path.join(logsDir, 'error.log');
 const cleanupIntervalMs = 30 * 60 * 1000;
 const maxFileAgeMs = 24 * 60 * 60 * 1000;
 const conversionLinks = new Map();
@@ -34,8 +38,15 @@ function normalizeFilename(name) {
   }
 }
 
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
-if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir);
+function ensureDir(dirPath) {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+}
+
+ensureDir(uploadsDir);
+ensureDir(outputDir);
+ensureDir(logsDir);
 
 const storage = multer.diskStorage({
   destination: uploadsDir,
@@ -72,10 +83,15 @@ function sleep(ms) {
 }
 
 function logError(error, context = {}) {
-  const time = new Date().toISOString();
-  const contextText = Object.keys(context).length ? ` | context=${JSON.stringify(context)}` : '';
-  const message = `[${time}] ${error.stack || error.message || error}${contextText}${os.EOL}`;
-  fs.appendFileSync(errorLogPath, message, 'utf8');
+  try {
+    const time = new Date().toISOString();
+    const contextText = Object.keys(context).length ? ` | context=${JSON.stringify(context)}` : '';
+    const message = `[${time}] ${error.stack || error.message || error}${contextText}${os.EOL}`;
+    fs.appendFileSync(errorLogPath, message, 'utf8');
+  } catch (logWriteError) {
+    console.error('logError failed:', logWriteError);
+    console.error('original error:', error);
+  }
 }
 
 function cleanupDirectory(dirPath, maxAgeMsValue) {
@@ -309,6 +325,9 @@ async function processFile(filePath, ext) {
   }
 
   if (ext === '.ppt') {
+    if (isVercel) {
+      throw new Error('Формат .ppt недоступен в Vercel Serverless окружении.');
+    }
     return processPpt(filePath);
   }
 
@@ -410,7 +429,14 @@ app.use((err, req, res, next) => {
   return res.status(500).json({ error: 'Внутренняя ошибка сервера.' });
 });
 
-startCleanupJob();
-app.listen(PORT, () => {
-  console.log(`Server started: http://localhost:${PORT}`);
-});
+if (!isVercel) {
+  startCleanupJob();
+}
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server started: http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
