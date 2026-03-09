@@ -340,7 +340,7 @@
     <section class="content">
       <section class="panel">
         <h1 class="title">Транслитерация .ppt, .pptx, .docx, .pdf, .txt</h1>
-        <p class="subtitle">Перетащите файл в область ниже или выберите вручную.</p>
+        <p id="subtitle" class="subtitle">Перетащите файл в область ниже или выберите вручную.</p>
 
         <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Зона загрузки файла">
           <div class="ant-upload-wrap">
@@ -382,6 +382,7 @@
 
   <script>
     const fileInput = document.getElementById('fileInput');
+    const subtitleEl = document.getElementById('subtitle');
     const dropzone = document.getElementById('dropzone');
     const pickBtn = document.getElementById('pickBtn');
     const fileMeta = document.getElementById('fileMeta');
@@ -395,10 +396,27 @@
     let progressTimer = null;
     let activeRequestId = 0;
     let currentUpload = null;
+    let supportsLegacyPpt = true;
+    let objectUrl = null;
 
     function setStatus(message, type) {
       statusEl.textContent = message;
       statusEl.className = `status ${type || ''}`.trim();
+    }
+
+    function extractFilenameFromDisposition(disposition) {
+      if (!disposition) return null;
+      const utf8Match = disposition.match(/filename\\*=UTF-8''([^;]+)/i);
+      if (utf8Match && utf8Match[1]) {
+        try {
+          return decodeURIComponent(utf8Match[1]);
+        } catch (e) {
+          return utf8Match[1];
+        }
+      }
+
+      const asciiMatch = disposition.match(/filename=\"?([^\";]+)\"?/i);
+      return asciiMatch && asciiMatch[1] ? asciiMatch[1] : null;
     }
 
     function setProgress(value) {
@@ -490,7 +508,10 @@
     }
 
     function hasAllowedExtension(name) {
-      return /\.(pdf|docx|txt|ppt|pptx)$/i.test(name);
+      if (supportsLegacyPpt) {
+        return /\.(pdf|docx|txt|ppt|pptx)$/i.test(name);
+      }
+      return /\.(pdf|docx|txt|pptx)$/i.test(name);
     }
 
     function assignFile(file) {
@@ -536,6 +557,10 @@
       fileInput.value = '';
       setSelectedFile(null);
       currentUpload = null;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        objectUrl = null;
+      }
       renderUploadItem();
       downloadBtn.classList.remove('show');
       setStatus('', '');
@@ -558,6 +583,24 @@
       const file = e.dataTransfer.files[0];
       assignFile(file);
     });
+
+    (async function loadCapabilities() {
+      try {
+        const response = await fetch('/capabilities');
+        const caps = await response.json();
+        supportsLegacyPpt = Boolean(caps.supportsLegacyPpt);
+
+        if (!supportsLegacyPpt) {
+          fileInput.setAttribute(
+            'accept',
+            '.pdf,.docx,.txt,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain'
+          );
+          subtitleEl.textContent = 'Перетащите файл в область ниже или выберите вручную. На этом хостинге используйте .pptx вместо .ppt.';
+        }
+      } catch (e) {
+        // Ignore capability detection errors and keep default behavior.
+      }
+    })();
 
     convertBtn.addEventListener('click', async () => {
       const file = fileInput.files[0];
@@ -589,7 +632,7 @@
         const response = await new Promise((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           xhr.open('POST', '/convert');
-          xhr.responseType = 'json';
+          xhr.responseType = 'blob';
 
           xhr.upload.onprogress = (event) => {
             if (!event.lengthComputable) return;
@@ -605,29 +648,42 @@
           xhr.onload = () => resolve({
             ok: xhr.status >= 200 && xhr.status < 300,
             status: xhr.status,
-            json: async () => xhr.response
+            blob: xhr.response,
+            getHeader: (name) => xhr.getResponseHeader(name)
           });
 
           xhr.onerror = () => reject(new Error('Сетевая ошибка при загрузке файла.'));
           xhr.send(formData);
         });
 
-        const result = await response.json();
-
         if (!response.ok) {
-          throw new Error((result && result.error) || 'Ошибка конвертации.');
+          let errorMessage = 'Ошибка конвертации.';
+          try {
+            const errorText = await response.blob.text();
+            const parsed = JSON.parse(errorText);
+            if (parsed && parsed.error) errorMessage = parsed.error;
+          } catch (e) {
+            // keep default message
+          }
+          throw new Error(errorMessage);
         }
 
         stopProgressTimer();
         setProgress(100);
         await new Promise((resolve) => setTimeout(resolve, 220));
-        setStatus(result.message, 'ok');
+        const disposition = response.getHeader('Content-Disposition');
+        const serverName = extractFilenameFromDisposition(disposition) || (file.name || 'result');
+        if (objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+        }
+        objectUrl = URL.createObjectURL(response.blob);
+        setStatus('Файл успешно обработан.', 'ok');
         if (currentUpload) {
           currentUpload.status = 'done';
           renderUploadItem();
         }
-        downloadBtn.href = result.downloadUrl;
-        downloadBtn.setAttribute('download', result.outputName || 'result');
+        downloadBtn.href = objectUrl;
+        downloadBtn.setAttribute('download', serverName);
         downloadBtn.classList.add('show');
       } catch (error) {
         stopProgressTimer();

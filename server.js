@@ -16,6 +16,7 @@ const app = express();
 const PORT = 3000;
 const isVercel = Boolean(process.env.VERCEL);
 const writableRoot = isVercel ? '/tmp' : __dirname;
+const supportsLegacyPpt = !isVercel;
 
 const uploadsDir = path.join(writableRoot, 'uploads');
 const outputDir = path.join(writableRoot, 'output');
@@ -23,7 +24,6 @@ const logsDir = path.join(writableRoot, 'logs');
 const errorLogPath = path.join(logsDir, 'error.log');
 const cleanupIntervalMs = 30 * 60 * 1000;
 const maxFileAgeMs = 24 * 60 * 60 * 1000;
-const conversionLinks = new Map();
 const sofficeCandidates = [
   'soffice',
   'C:\\Program Files\\LibreOffice\\program\\soffice.exe',
@@ -78,6 +78,12 @@ app.use((req, res, next) => {
 });
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.get('/capabilities', (req, res) => {
+  return res.json({
+    supportsLegacyPpt
+  });
+});
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -130,6 +136,24 @@ function computeMinimumWaitMs(fileSizeBytes) {
   const sizeMb = fileSizeBytes / (1024 * 1024);
   const extraBySizeMs = Math.min(15000, Math.floor(sizeMb * 800)); // larger files wait longer
   return minBaseMs + extraBySizeMs;
+}
+
+function getDownloadMime(ext) {
+  if (ext === '.txt') return 'text/plain; charset=utf-8';
+  if (ext === '.pdf') return 'application/pdf';
+  if (ext === '.docx') return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (ext === '.pptx') return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+  if (ext === '.ppt') return 'application/vnd.ms-powerpoint';
+  return 'application/octet-stream';
+}
+
+function getAsciiFallbackName(originalName, ext) {
+  const base = path.parse(originalName).name
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  const safeBase = base || 'result';
+  return `${safeBase}${ext}`;
 }
 
 function decodeXmlEntities(value) {
@@ -325,8 +349,8 @@ async function processFile(filePath, ext) {
   }
 
   if (ext === '.ppt') {
-    if (isVercel) {
-      throw new Error('Формат .ppt недоступен в Vercel Serverless окружении.');
+    if (!supportsLegacyPpt) {
+      throw new Error('Формат .ppt недоступен в Vercel. Конвертируйте файл в .pptx и загрузите снова.');
     }
     return processPpt(filePath);
   }
@@ -336,26 +360,18 @@ async function processFile(filePath, ext) {
 
 app.post('/convert', upload.single('file'), async (req, res) => {
   const requestStartedAt = Date.now();
+  let uploadedPath = null;
 
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Файл не загружен.' });
     }
 
-    const uploadedPath = req.file.path;
+    uploadedPath = req.file.path;
     const originalName = normalizeFilename(req.file.originalname);
     const originalExt = path.extname(originalName).toLowerCase();
-    const originalBase = path.parse(originalName).name;
 
     const outputBuffer = await processFile(uploadedPath, originalExt);
-    const internalOutputName = `${Date.now()}-${originalBase}-latin${originalExt}`;
-    const outputPath = path.join(outputDir, internalOutputName);
-
-    fs.writeFileSync(outputPath, outputBuffer);
-    conversionLinks.set(internalOutputName, {
-      uploadedPath,
-      downloadName: originalName
-    });
 
     const minWaitMs = computeMinimumWaitMs(req.file.size || 0);
     const elapsedMs = Date.now() - requestStartedAt;
@@ -365,54 +381,32 @@ app.post('/convert', upload.single('file'), async (req, res) => {
       await sleep(remainingMs);
     }
 
-    return res.json({
-      message: 'Файл успешно обработан.',
-      outputName: originalName,
-      downloadUrl: `/download/${path.basename(outputPath)}`
-    });
+    const encodedName = encodeURIComponent(originalName);
+    const asciiFallbackName = getAsciiFallbackName(originalName, originalExt);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${asciiFallbackName}"; filename*=UTF-8''${encodedName}`
+    );
+    res.setHeader('X-Convert-Message', 'Файл успешно обработан.');
+    res.type(getDownloadMime(originalExt));
+    return res.send(outputBuffer);
   } catch (error) {
     logError(error, {
       scope: 'convert',
       originalName: req.file ? normalizeFilename(req.file.originalname) : null
     });
-    return res.status(500).json({ error: error.message || 'Ошибка обработки файла.' });
-  }
-});
-
-app.get('/download/:filename', (req, res) => {
-  const internalName = req.params.filename;
-  const filePath = path.join(outputDir, internalName);
-
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send('Файл не найден.');
-  }
-
-  const link = conversionLinks.get(internalName);
-  const downloadName = link && link.downloadName ? link.downloadName : internalName;
-
-  return res.download(filePath, downloadName, (downloadError) => {
-    conversionLinks.delete(internalName);
-
+    const message = error.message || 'Ошибка обработки файла.';
+    const statusCode = message.includes('Формат .ppt недоступен') ? 400 : 500;
+    return res.status(statusCode).json({ error: message });
+  } finally {
     try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+      if (uploadedPath && fs.existsSync(uploadedPath)) {
+        fs.unlinkSync(uploadedPath);
       }
-    } catch (error) {
-      logError(error, { scope: 'download-output-cleanup', filename: internalName });
+    } catch (cleanupError) {
+      logError(cleanupError, { scope: 'convert-upload-cleanup' });
     }
-
-    try {
-      if (link && link.uploadedPath && fs.existsSync(link.uploadedPath)) {
-        fs.unlinkSync(link.uploadedPath);
-      }
-    } catch (error) {
-      logError(error, { scope: 'download-upload-cleanup', filename: internalName });
-    }
-
-    if (downloadError) {
-      logError(downloadError, { scope: 'download-send', filename: internalName });
-    }
-  });
+  }
 });
 
 app.use((err, req, res, next) => {
@@ -429,11 +423,10 @@ app.use((err, req, res, next) => {
   return res.status(500).json({ error: 'Внутренняя ошибка сервера.' });
 });
 
-if (!isVercel) {
-  startCleanupJob();
-}
-
 if (require.main === module) {
+  if (!isVercel) {
+    startCleanupJob();
+  }
   app.listen(PORT, () => {
     console.log(`Server started: http://localhost:${PORT}`);
   });
