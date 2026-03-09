@@ -1,5 +1,4 @@
-﻿{
-  "name": "cyrillic-to-latin-service",
+{"name": "cyrillic-to-latin-service",
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
